@@ -1,4 +1,17 @@
-FROM mcr.microsoft.com/playwright:v1.61.1-noble AS build
+# Playwright 官方镜像 v1.61.1-noble（2026-06-23 构建）自带 Node 24.17.0 / npm 11.13.0，
+# 低于 package.json engines（node >=24.18.0、npm >=11.16.0）及下方版本断言的要求；
+# Playwright 版本被 package.json 锁定为 1.61.1，无法换更新的镜像，
+# 所以从官方 node 镜像拷入固定版本的 Node + npm，构建阶段与运行阶段共用同一个 base，保证工具链一致。
+# node 与 npm 版本需与 .node-version、package.json 的 packageManager 保持同步。
+FROM node:24.18.0-bookworm-slim AS node-toolchain
+
+FROM mcr.microsoft.com/playwright:v1.61.1-noble AS base
+COPY --from=node-toolchain /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-toolchain /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+
+FROM base AS build
 
 WORKDIR /app
 
@@ -13,7 +26,7 @@ COPY migrations ./migrations
 
 RUN npm run build && npm prune --omit=dev --no-audit --strict-allow-scripts
 
-FROM mcr.microsoft.com/playwright:v1.61.1-noble
+FROM base
 
 WORKDIR /app
 
